@@ -3,4 +3,4 @@ cd server
 source .rvmrc
 rvm info
 bundle install
-exec bundle exec rails s -p $1
+exec bundle exec rails s -p $1 MONGOLAB_URI=$MONGOLAB_URI
