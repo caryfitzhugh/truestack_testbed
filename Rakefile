@@ -2,7 +2,7 @@ require 'net/http'
 SERVER_PORT=3007
 COLLECTOR_PORT=10001
 MONGOLAB_DB_NAME='truestack_testbed'
-MONGOLAB_URI="http://localhost:27017/#{MONGOLAB_DB_NAME}"
+MONGOLAB_URI_DEVELOPMENT="http://localhost:27017/#{MONGOLAB_DB_NAME}"
 API_TOKEN='123456789abcdefghijklmnop'
 
 desc "Run the tests for every test system in this repository"
@@ -36,7 +36,7 @@ end
 namespace :collector do
   desc "Start a collector instance"
   task :start do
-    collector_pid = Process.spawn({'MONGOLAB_URI' => MONGOLAB_URI},
+    collector_pid = Process.spawn({'MONGOLAB_URI_DEVELOPMENT' => MONGOLAB_URI_DEVELOPMENT},
                                    "./start_collector http://127.0.0.1:#{COLLECTOR_PORT}",
                                    [:err, :out] => [File.join('log','collector.log').to_s, 'w'])
     tries = 0
@@ -64,7 +64,7 @@ end
 namespace :server do
   desc "Start the latest truestack server instance"
   task :start do
-    server_pid = Process.spawn({'MONGOLAB_URI' => MONGOLAB_URI},
+    server_pid = Process.spawn({'MONGOLAB_URI_DEVELOPMENT' => MONGOLAB_URI_DEVELOPMENT},
                                "./start_server #{SERVER_PORT}",
                                [:err, :out] => [File.join('log','server.log').to_s, 'w'])
     tries = 0
