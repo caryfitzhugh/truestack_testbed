@@ -1,4 +1,0 @@
-cd server
-source .rvmrc
-bundle install
-exec bundle exec rake automation:create_admin_user[$1]

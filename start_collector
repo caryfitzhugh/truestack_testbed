@@ -1,4 +1,0 @@
-cd server
-source .rvmrc
-bundle install
-exec bundle exec rake workers:collector:start[$1] --trace MONGOLAB_URI_DEVELOPMENT=$MONGOLAB_URI_DEVELOPMENT

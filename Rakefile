@@ -5,23 +5,55 @@ MONGOLAB_DB_NAME='truestack_testbed'
 MONGOLAB_URI_DEVELOPMENT="http://localhost:27017/#{MONGOLAB_DB_NAME}"
 API_TOKEN='123456789abcdefghijklmnop'
 
+require 'rubygems'
+require 'pry'
+require 'pry-nav'
+
+
 desc "Run the tests for every test system in this repository"
 task :run do
-  # We start the TS target server (submodule in server)
+  `rm log/*`
+
+  Rake::Task['mongo:drop'].execute
   Rake::Task['server:start'].execute
+  Rake::Task['collector:start'].execute
+
+  # Create the user for admin access
+  `./scripts/create_admin_user #{API_TOKEN} #{MONGOLAB_URI_DEVELOPMENT}`
 
   begin
     # We go into each testcase directory
     # Open each 'testcase' directory.
-    # Dump the DB
-    Rake::Task['mongo:drop'].execute
+    system_under_test_port = 4000
 
-    # Stop / start each ts server
+    Dir["systems_under_test/*"].each do |system_under_test|
+      puts "Running system: #{File.dirname(system_under_test)}"
+      puts "API Token created"
 
-    # Create the user
-    `./create_admin_user #{API_TOKEN}`
+      puts "Create a user application"
+      ts_uri = URI("http://localhost:#{SERVER_PORT}/api/apps")
+
+      truestack_uri = nil
+      Net::HTTP.start(ts_uri.host, ts_uri.port) do |http|
+        req = Net::HTTP::Post.new ts_uri.path
+        req.set_form_data("name" => "User App #{system_under_test}")
+        req.add_field("Truestack-Access-Key", API_TOKEN)
+        response = http.request req
+        truestack_uri = response.body
+      end
+
+      puts "Created application on the server, now starting the system under test #{system_under_test}"
+      # Start system under test with new user app name
+      run_process({'TRUESTACK_URI' => truestack_uri}, "scripts/start_system_under_test #{system_under_test_port} #{system_under_test}") do |pid|
+        wait_for_open_port(system_under_test_port, pid)
+        puts "Checking that there is a startup event in the TS server"
+        puts "Checking that there is an exception event in the TS server"
+        puts "Checking that there are a pair of reqeusts in TS server"
+      end
+    end
   ensure
-    Rake::Task['server:start'].execute
+    Rake::Task['collector:stop'].execute
+    Rake::Task['server:stop'].execute
   end
 end
 
@@ -37,16 +69,12 @@ namespace :collector do
   desc "Start a collector instance"
   task :start do
     collector_pid = Process.spawn({'MONGOLAB_URI_DEVELOPMENT' => MONGOLAB_URI_DEVELOPMENT},
-                                   "./start_collector http://127.0.0.1:#{COLLECTOR_PORT}",
+                                   "./scripts/start_collector http://127.0.0.1:#{COLLECTOR_PORT}",
                                    [:err, :out] => [File.join('log','collector.log').to_s, 'w'])
     tries = 0
-    puts "Starting server on port #{SERVER_PORT}."
+    puts "Starting collector on port #{COLLECTOR_PORT}."
+    wait_for_open_port(COLLECTOR_PORT, collector_pid)
 
-    while !is_port_open?('127.0.0.1', 10000) && tries < 20
-      tries += 1
-      sleep 1
-      print "."
-    end
     puts "\nStarted"
 
     File.open("pids/collector.pid", 'w') do |f|
@@ -65,15 +93,11 @@ namespace :server do
   desc "Start the latest truestack server instance"
   task :start do
     server_pid = Process.spawn({'MONGOLAB_URI_DEVELOPMENT' => MONGOLAB_URI_DEVELOPMENT},
-                               "./start_server #{SERVER_PORT}",
+                               "./scripts/start_server #{SERVER_PORT}",
                                [:err, :out] => [File.join('log','server.log').to_s, 'w'])
     tries = 0
     puts "Starting server on port #{SERVER_PORT}."
-    while !is_port_open?('127.0.0.1', SERVER_PORT)
-      tries += 1
-      sleep 1
-      print "."
-    end
+    wait_for_open_port(SERVER_PORT, server_pid)
 
     puts "\nStarted."
 
@@ -93,6 +117,27 @@ namespace :server do
     rescue Exception
     end
     `rm -f pids/server.pid`
+  end
+end
+
+def run_process(env, string)
+  system_under_test_pid = Process.spawn(string, [:err, :out] => [File.join('log',"#{string.gsub(/\W/,'_')}.log").to_s, 'w'])
+  yield
+  # Stop the system under test
+  Process.kill("SIGKILL", system_under_test_pid)
+end
+
+def wait_for_open_port(port, pid = nil)
+  while !is_port_open?('127.0.0.1', port)
+    sleep 1
+    if (pid)
+    print "."
+      begin
+        Process.getpgid( pid )
+      rescue Errno::ESRCH
+        raise "Server for port #{port} failed on startup"
+      end
+     end
   end
 end
 
