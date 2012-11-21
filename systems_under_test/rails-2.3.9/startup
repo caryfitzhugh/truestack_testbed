@@ -1,1 +1,3 @@
-exec ./script/server $1
+source .rvmrc
+bundle install
+exec bundle exec ./script/server $1
