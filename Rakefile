@@ -1,3 +1,4 @@
+require 'json'
 require 'net/http'
 SERVER_PORT=3007
 COLLECTOR_PORT=10001
@@ -34,21 +35,44 @@ task :run do
       ts_uri = URI("http://localhost:#{SERVER_PORT}/api/apps")
 
       truestack_uri = nil
+      truestack_app_id = nil
       Net::HTTP.start(ts_uri.host, ts_uri.port) do |http|
         req = Net::HTTP::Post.new ts_uri.path
         req.set_form_data("name" => "User App #{system_under_test}")
         req.add_field("Truestack-Access-Key", API_TOKEN)
         response = http.request req
-        truestack_uri = response.body
+        message = JSON.parse(response.body)
+        truestack_uri = message['url']
+        truestack_app_id = message['id']
       end
+      puts "obtained TS url: #{truestack_uri}"
 
-      puts "Created application on the server, now starting the system under test #{system_under_test}"
+      puts "\n\n# System under test #{system_under_test}"
       # Start system under test with new user app name
-      run_process({'TRUESTACK_URI' => truestack_uri}, "scripts/start_system_under_test #{system_under_test_port} #{system_under_test}") do |pid|
-        wait_for_open_port(system_under_test_port, pid)
-        puts "Checking that there is a startup event in the TS server"
-        puts "Checking that there is an exception event in the TS server"
-        puts "Checking that there are a pair of reqeusts in TS server"
+      run_process("scripts/start_system_under_test #{system_under_test_port} #{system_under_test} #{truestack_uri}") do |pid|
+        begin
+          wait_for_open_port(system_under_test_port, pid)
+          puts "? startup event "
+            ts_uri = URI("http://localhost:#{SERVER_PORT}/api/apps/#{truestack_app_id}/deployments")
+            Net::HTTP.start(ts_uri.host, ts_uri.port) do |http|
+              req = Net::HTTP::Get.new ts_uri.path
+              req.add_field("Truestack-Access-Key", API_TOKEN)
+              response = http.request req
+              message = JSON.parse(response.body)
+              if (message.length < 1)
+                raise "- FAIL: Did not have the deployment action"
+              end
+              puts "+ PASS"
+            end
+
+          puts "# /exception"
+          puts "? exception event in the TS server"
+          puts "# /request"
+
+          puts "? a pair of reqeusts in TS server"
+        rescue Exception => e
+          puts "Failed: #{e}"
+        end
       end
     end
   ensure
@@ -120,7 +144,8 @@ namespace :server do
   end
 end
 
-def run_process(env, string)
+
+def run_process(string)
   system_under_test_pid = Process.spawn(string, [:err, :out] => [File.join('log',"#{string.gsub(/\W/,'_')}.log").to_s, 'w'])
   yield
   # Stop the system under test

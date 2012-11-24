@@ -1,3 +1,11 @@
-source .rvmrc
-bundle install
-exec bundle exec ./script/server $1
+#!/bin/bash
+if [[ -s "$HOME/.rvm/scripts/rvm" ]] ; then
+  source "$HOME/.rvm/scripts/rvm"
+elif [[ -s "/usr/local/rvm/scripts/rvm" ]] ; then
+  source "/usr/local/rvm/scripts/rvm"
+else
+  printf "ERROR: An RVM installation was not found.\n"
+fi
+echo $2
+export TRUESTACK_URI=$2
+source .rvmrc && bundle update && exec bundle exec ./script/server -p $1
