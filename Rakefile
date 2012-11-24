@@ -52,6 +52,7 @@ task :run do
       run_process("scripts/start_system_under_test #{system_under_test_port} #{system_under_test} #{truestack_uri}") do |pid|
         begin
           wait_for_open_port(system_under_test_port, pid)
+
           puts "? startup event "
             ts_uri = URI("http://localhost:#{SERVER_PORT}/api/apps/#{truestack_app_id}/deployments")
             Net::HTTP.start(ts_uri.host, ts_uri.port) do |http|
@@ -66,8 +67,10 @@ task :run do
             end
 
           puts "# /exception"
+          Net::HTTP.get("127.0.0.1:#{system_under_test_port}", '/exception')
           puts "? exception event in the TS server"
           puts "# /request"
+          Net::HTTP.get("127.0.0.1:#{system_under_test_port}", '/request')
 
           puts "? a pair of reqeusts in TS server"
         rescue Exception => e
