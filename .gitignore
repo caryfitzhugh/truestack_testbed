@@ -1,3 +1,6 @@
+systems_under_test/**/Gemfile.lock
+systems_under_test/**/log
+systems_under_test/**/tmp
 *.swo
 *.swp
 pids/*
