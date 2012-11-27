@@ -78,6 +78,8 @@ task :run do
         end
       end
     end
+  rescue Exception => e
+    puts "Error: #{e}"
   ensure
     Rake::Task['collector:stop'].execute
     Rake::Task['server:stop'].execute
