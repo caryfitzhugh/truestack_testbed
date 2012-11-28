@@ -53,6 +53,7 @@ task :run do
         begin
           wait_for_open_port(system_under_test_port, pid)
 
+          sleep 5
           puts "? startup event "
             ts_uri = URI("http://localhost:#{SERVER_PORT}/api/apps/#{truestack_app_id}/deployments")
             Net::HTTP.start(ts_uri.host, ts_uri.port) do |http|
@@ -67,12 +68,24 @@ task :run do
             end
 
           puts "# /exception"
-          Net::HTTP.get("127.0.0.1:#{system_under_test_port}", '/exception')
-          puts "? exception event in the TS server"
+          Net::HTTP.get(URI("http://localhost:#{system_under_test_port}/exception"))
           puts "# /request"
-          Net::HTTP.get("127.0.0.1:#{system_under_test_port}", '/request')
+          Net::HTTP.get(URI("http://localhost:#{system_under_test_port}/request"))
 
-          puts "? a pair of reqeusts in TS server"
+          puts "? exception event in the TS server"
+            ts_uri = URI("http://localhost:#{SERVER_PORT}/api/apps/#{truestack_app_id}/time_slices")
+            Net::HTTP.start(ts_uri.host, ts_uri.port) do |http|
+              req = Net::HTTP::Get.new ts_uri.path
+              req.add_field("Truestack-Access-Key", API_TOKEN)
+              response = http.request req
+              message = JSON.parse(response.body)
+
+              if (message.length < 1)
+                raise "- FAIL: Did not have the time slices"
+              end
+              puts "+ PASS"
+            end
+
         rescue Exception => e
           puts "Failed: #{e}"
         end
@@ -151,8 +164,10 @@ end
 
 
 def run_process(string)
+  puts "++ Running: #{string}"
+
   system_under_test_pid = Process.spawn(string, [:err, :out] => [File.join('log',"#{string.gsub(/\W/,'_')}.log").to_s, 'w'])
-  yield
+  yield system_under_test_pid
   # Stop the system under test
   Process.kill("SIGKILL", system_under_test_pid)
 end
@@ -160,14 +175,14 @@ end
 def wait_for_open_port(port, pid = nil)
   while !is_port_open?('127.0.0.1', port)
     sleep 1
-    if (pid)
     print "."
+    if (pid)
       begin
         Process.getpgid( pid )
       rescue Errno::ESRCH
         raise "Server for port #{port} failed on startup"
       end
-     end
+    end
   end
 end
 
